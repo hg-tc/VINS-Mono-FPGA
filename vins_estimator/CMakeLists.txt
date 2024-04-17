@@ -51,7 +51,28 @@ add_executable(vins_estimator
     src/initial/initial_ex_rotation.cpp
     )
 
+add_executable(imu
+    src/myimufactor.cpp
+    )
+add_executable(mar
+    src/mymarfactor.cpp
+    )
+add_executable(pro
+    src/myprofactor.cpp
+    )
+
 
 target_link_libraries(vins_estimator ${catkin_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES}) 
 
 
+target_link_libraries(imu 
+    ${catkin_LIBRARIES}
+    ${CHOLMOD_LIBRARIES} gtsam)
+
+target_link_libraries(mar
+    ${catkin_LIBRARIES}
+    ${CHOLMOD_LIBRARIES} gtsam)
+
+target_link_libraries(pro
+    ${catkin_LIBRARIES}
+    ${CHOLMOD_LIBRARIES} gtsam)

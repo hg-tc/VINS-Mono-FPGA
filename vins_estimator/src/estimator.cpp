@@ -673,6 +673,7 @@ void Estimator::optimization()
     ceres::LossFunction *loss_function;
     //loss_function = new ceres::HuberLoss(1.0);
     loss_function = new ceres::CauchyLoss(1.0);
+    // std::cout << "WINDOW_SIZE: "<<WINDOW_SIZE << " NUM_OF_CAM: " << NUM_OF_CAM <<"ESTIMATE_TD: "<< ESTIMATE_TD<< std::endl;
     for (int i = 0; i < WINDOW_SIZE + 1; i++)
     {
         ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
@@ -703,6 +704,7 @@ void Estimator::optimization()
     if (last_marginalization_info)
     {
         // construct new marginlization_factor
+        // std::cout << "size: "<<last_marginalization_parameter_blocks.size()<< " end" << std::endl;
         MarginalizationFactor *marginalization_factor = new MarginalizationFactor(last_marginalization_info);
         problem.AddResidualBlock(marginalization_factor, NULL,
                                  last_marginalization_parameter_blocks);
@@ -766,9 +768,10 @@ void Estimator::optimization()
     ROS_DEBUG("visual measurement count: %d", f_m_cnt);
     ROS_DEBUG("prepare for ceres: %f", t_prepare.toc());
 
+    std::cout << relocalization_info << std::endl;
     if(relocalization_info)
     {
-        //printf("set relocalization factor! \n");
+        printf("set relocalization factor! \n");
         ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
         problem.AddParameterBlock(relo_Pose, SIZE_POSE, local_parameterization);
         int retrive_feature_index = 0;

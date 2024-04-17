@@ -342,6 +342,7 @@ bool MarginalizationFactor::Evaluate(double const *const *parameters, double *re
     //}
     int n = marginalization_info->n;
     int m = marginalization_info->m;
+    // std::cout << n << ", " << m << std::endl;
     Eigen::VectorXd dx(n);
     for (int i = 0; i < static_cast<int>(marginalization_info->keep_block_size.size()); i++)
     {
