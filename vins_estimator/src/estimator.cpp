@@ -681,12 +681,20 @@ void Generate_Inst(ceres::CRSMatrix* jacobian_crs_matrix, string name){
 
     ofstream I_file(std::string("/home/zsq/Data/Inst_")+name+std::string(".txt"), ios::binary);
     
+
+
+    vector<string> code_list;
+    vector<int> code_pos;
+    string uni_code;
+    vector<int> pos_list;
+    vector<int> position_col;
+    vector<int> pre_position_col;
     int vision_col = 0;
     int pre_vision_col = 0;
     int row_num= 1;
-    string L_pi = "0000";
-    string E_pi = "0000";
-    string G_pi = "0000";
+    int L_pi = 0;
+    int E_pi = 0;
+    int G_pi = 0;
     int count = 0;
     for(int row_index; row_index < row_size; ++row_index){
         int col_start = jacobian_crs_matrix_rows[row_index];
@@ -724,12 +732,57 @@ void Generate_Inst(ceres::CRSMatrix* jacobian_crs_matrix, string name){
             }
         }
 
-        if(block_num==3 && count<10){
+        if(block_num==3){
             count += 1;
-            cout << endl << "=====writing Instruction=====" << endl;
+            cout << "count: "<< count <<"=====writing Instruction=====" << endl;
             pre_vision_col = vision_col;
             vision_col = lines_position[2];
-            cout << endl << count << " "<< pre_vision_col <<" "<< vision_col << endl;
+
+            pre_position_col[0] = position_col[0];
+            pre_position_col[1] = position_col[1];
+            position_col[0] = lines_position[0];
+            position_col[1] = lines_position[1];
+
+            if(count%2 == 0){
+                for(int i=0;i<2;i++){
+                    vector<int>::iterator it,it2;
+                    it=find(pos_list.begin(),pos_list.end(),pre_position_col[i]);
+                    if(it!=pos_list.end()){
+                        for(int j=0;j<code_list.size();j++){
+                            code_list[j]+='0'; 
+                        }
+                    }
+                    else{
+                        it2=find(code_pos.begin(),code_pos.end(),pre_position_col[i]);
+                        if(it2!=code_pos.end()){
+                            int index = std::distance(pos_list.begin(),it);
+                            string new_code(uni_code);
+                            new_code.replace(index,1,"1");
+                            new_code += '1';
+                            for(int j=0;j<code_list.size();j++){
+                                if(j==index){code_list.push_back(new_code);}
+                                else{code_list[j]+='0';}   
+                            }
+                            code_pos.push_back(pre_position_col[i]);
+                        }
+                        else{
+                            int index = std::distance(code_pos.begin(),it2);
+                            for(int j=0;j<code_list.size();j++){
+                                if(j==index){code_list[j] += '1';}
+                                else{code_list[j]+='0';}   
+                            }
+                        }
+                        
+                        
+                    }
+                    pos_list.push_back(pre_position_col[i]);
+                    uni_code += "0";
+                }
+
+                
+            }
+
+            cout << pre_vision_col <<" "<< vision_col << endl;
 
             if(pre_vision_col != 0){
                 if((vision_col == pre_vision_col)){
@@ -738,8 +791,8 @@ void Generate_Inst(ceres::CRSMatrix* jacobian_crs_matrix, string name){
                     int lines = row_num / 2;
                     row_num = 1;
                     string len = std::bitset<4>(lines).to_string();
-                    cout<<len<<endl;
-                    string Load_Instruction = "0001"+L_pi+"000000001"+"000000001"+len+"11";
+                    string L_pi_s = std::bitset<4>(L_pi).to_string();
+                    string Load_Instruction = "0001"+L_pi_s+"000000001"+"000000001"+len+"11";
                     I_file << Load_Instruction << endl;
                     cout << "Load_Instruction: " << Load_Instruction <<endl;
                     //
@@ -759,16 +812,17 @@ void Generate_Inst(ceres::CRSMatrix* jacobian_crs_matrix, string name){
                         cout << "ADD_Instruction: " << ADD_Instruction <<endl;
                     }
                     //
-                    string multi_Instruction = "0011" + E_pi + len;
+                    string E_pi_s = std::bitset<4>(E_pi).to_string();
+                    string multi_Instruction = "0011" + E_pi_s + "00000000000000000000" +len;
                     I_file << multi_Instruction << endl;
                     cout << "multi_Instruction: " << multi_Instruction <<endl;
-                    string GTG_Instruction = "0100" + G_pi + len;
+                    string G_pi_s = std::bitset<4>(G_pi).to_string();
+                    string GTG_Instruction = "0100" + G_pi_s + "00000000000000000000" + len;
                     I_file << GTG_Instruction << endl;
                     cout << "GTG_Instruction: " << GTG_Instruction <<endl;
                 }
             } 
-            cout << endl;
-            I_file << endl;
+            // I_file << endl;
         }
 
         
