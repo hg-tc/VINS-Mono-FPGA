@@ -1,4 +1,5 @@
 #include "estimator.h"
+#include <bitset>
 
 Estimator::Estimator(): f_manager{Rs}
 {
@@ -667,6 +668,199 @@ bool Estimator::failureDetection()
 }
 
 
+void Generate_Inst(ceres::CRSMatrix* jacobian_crs_matrix, string name){
+
+    int row_size = jacobian_crs_matrix->num_rows;
+    int col_size = jacobian_crs_matrix->num_cols;
+
+    std::vector<int> jacobian_crs_matrix_rows, jacobian_crs_matrix_cols;
+    std::vector<double> jacobian_crs_matrix_values;
+    jacobian_crs_matrix_rows = jacobian_crs_matrix->rows;
+    jacobian_crs_matrix_cols = jacobian_crs_matrix->cols;
+    jacobian_crs_matrix_values = jacobian_crs_matrix->values;
+
+    ofstream I_file(std::string("/home/zsq/Data/Inst_")+name+std::string(".txt"), ios::binary);
+    
+    int vision_col = 0;
+    int pre_vision_col = 0;
+    int row_num= 1;
+    string L_pi = "0000";
+    string E_pi = "0000";
+    string G_pi = "0000";
+    int count = 0;
+    for(int row_index; row_index < row_size; ++row_index){
+        int col_start = jacobian_crs_matrix_rows[row_index];
+        int col_end = jacobian_crs_matrix_rows[row_index+1];
+        int position = 0;
+        int pre_position = 0;
+        int line_num = 1;
+        int block_num = 0;
+        std::vector<int> lines_position,lines_num;
+        // cout << "\n" << endl;
+        for(int col_index = col_start; col_index < col_end; ++col_index){
+            pre_position = position;
+            position = jacobian_crs_matrix_cols[col_index];
+            // if(row_index==2000){
+            //     cout << " " << position << " ";
+            // }
+            // cout << " " << position << " ";
+            if(col_index != col_start){
+                if((position - pre_position == 1)){
+                    line_num += 1;
+                }else{
+                    lines_position.push_back(pre_position - line_num + 1);
+                    lines_num.push_back(line_num);
+                    // cout << " position: " << pre_position - line_num + 1<< " line_num: " << line_num << " | ";
+                    line_num = 1;
+                    block_num += 1;
+                }
+            } 
+            if(col_index == col_end - 1){
+                lines_position.push_back(pre_position - line_num + 1);
+                lines_num.push_back(line_num);
+                // cout << " position: " << pre_position - line_num + 1<< " line_num: " << line_num << " | ";
+                line_num = 1;
+                block_num += 1;
+            }
+        }
+
+        if(block_num==3 && count<10){
+            count += 1;
+            cout << endl << "=====writing Instruction=====" << endl;
+            pre_vision_col = vision_col;
+            vision_col = lines_position[2];
+            cout << endl << count << " "<< pre_vision_col <<" "<< vision_col << endl;
+
+            if(pre_vision_col != 0){
+                if((vision_col == pre_vision_col)){
+                    row_num += 1;
+                }else{
+                    int lines = row_num / 2;
+                    row_num = 1;
+                    string len = std::bitset<4>(lines).to_string();
+                    cout<<len<<endl;
+                    string Load_Instruction = "0001"+L_pi+"000000001"+"000000001"+len+"11";
+                    I_file << Load_Instruction << endl;
+                    cout << "Load_Instruction: " << Load_Instruction <<endl;
+                    //
+                    for(int j=0; j<lines-1; j++){
+                        string last = j==(lines-1) ? "1" : "0";
+                        string code;
+                        for (int k=0; k<9; k++){
+                            if(k<3){
+                                code += "01";
+                            }
+                            else{
+                                code += "00";
+                            }
+                        }
+                        string ADD_Instruction = string("0010")+"000000001"+last+code;
+                        I_file << ADD_Instruction << endl;
+                        cout << "ADD_Instruction: " << ADD_Instruction <<endl;
+                    }
+                    //
+                    string multi_Instruction = "0011" + E_pi + len;
+                    I_file << multi_Instruction << endl;
+                    cout << "multi_Instruction: " << multi_Instruction <<endl;
+                    string GTG_Instruction = "0100" + G_pi + len;
+                    I_file << GTG_Instruction << endl;
+                    cout << "GTG_Instruction: " << GTG_Instruction <<endl;
+                }
+            } 
+            cout << endl;
+            I_file << endl;
+        }
+
+        
+    }
+}
+
+Eigen::MatrixXd CRSMatrix2EigenMatrix(ceres::CRSMatrix* jacobian_crs_matrix){
+    Eigen::MatrixXd J(jacobian_crs_matrix->num_rows, jacobian_crs_matrix->num_cols);
+    J.setZero();
+
+    std::vector<int> jacobian_crs_matrix_rows, jacobian_crs_matrix_cols;
+    std::vector<double> jacobian_crs_matrix_values;
+    jacobian_crs_matrix_rows = jacobian_crs_matrix->rows;
+    jacobian_crs_matrix_cols = jacobian_crs_matrix->cols;
+    jacobian_crs_matrix_values = jacobian_crs_matrix->values;
+
+    int cur_index_in_cols_and_values = 0;
+    // rows is a num_rows + 1 sized array
+    int row_size = static_cast<int>(jacobian_crs_matrix_rows.size()) - 1;
+    // outer loop traverse rows, inner loop traverse cols and values
+    for(int row_index = 0; row_index < row_size; ++row_index){
+        while(cur_index_in_cols_and_values < jacobian_crs_matrix_rows[row_index+1]){
+            J(row_index, jacobian_crs_matrix_cols[cur_index_in_cols_and_values]) = jacobian_crs_matrix_values[cur_index_in_cols_and_values];
+            cur_index_in_cols_and_values++;
+        }
+    }
+    return J;
+}
+
+void Estimator::evaluateBA(ceres::Problem& problem, const ceres::Solver::Summary& summary){
+
+    struct timeval tv;  
+    gettimeofday(&tv,NULL); 
+    // std::cout<<"10e6 微秒级s ----:";
+    // std::cout<<tv.tv_sec<<"s,"<<tv.tv_usec<<"微秒"<<endl;
+    string name;
+    name = std::to_string(tv.tv_sec % 10) + std::to_string(tv.tv_usec / 10);
+    std::cout<<name<<"name"<<endl;
+
+    cout << summary.BriefReport() << endl;
+
+    ceres::Problem::EvaluateOptions EvalOpts;
+    ceres::CRSMatrix jacobian_crs_matrix;
+    problem.Evaluate(EvalOpts, nullptr, nullptr, nullptr, &jacobian_crs_matrix);
+
+    TicToc t_convert_J;
+    Eigen::MatrixXd J = CRSMatrix2EigenMatrix(&jacobian_crs_matrix);
+    cout << "convert sparse matrix cost " << t_convert_J.toc() << endl;
+
+    TicToc t_convert_I;
+    Generate_Inst(&jacobian_crs_matrix, name);
+    cout << "generate inst cost " << t_convert_I.toc() << endl;
+
+    TicToc t_construct_H;
+    Eigen::MatrixXd H = J.transpose()*J;
+    cout << "construct H cost " << t_construct_H.toc() << endl;
+
+    ofstream J_file(std::string("/home/zsq/Data/Jacobian_")+name+std::string(".txt"));
+    J_file << fixed;
+    J_file.precision(9);
+
+    int J_rows = J.rows(), J_cols = J.cols();
+    for(int i = 0; i < J_rows; ++i){
+        for(int j = 0;j < J_cols; ++j){
+            J_file << J(i, j);
+            if(j == J_cols - 1){
+                J_file << endl;
+            }
+            else{
+                J_file << " ";
+            }
+        }
+    }
+
+    ofstream H_file(std::string("/home/zsq/Data/Hessian_")+name+std::string(".txt"));
+    H_file << fixed;
+    H_file.precision(9);
+
+    int H_rows = H.rows(), H_cols = H.cols();
+    for(int i = 0; i < H_rows; ++i){
+        for(int j = 0; j < H_cols; ++j){
+            H_file << H(i, j);
+            if(j == H_cols - 1){
+                H_file << endl;
+            }
+            else{
+                H_file << " ";
+            }
+        }
+    }
+}
+
 void Estimator::optimization()
 {
     ceres::Problem problem;
@@ -822,6 +1016,16 @@ void Estimator::optimization()
     //cout << summary.BriefReport() << endl;
     ROS_DEBUG("Iterations : %d", static_cast<int>(summary.iterations.size()));
     ROS_DEBUG("solver costs: %f", t_solver.toc());
+
+    evaluateBA(problem, summary);
+    std::cout << "evaluateBA end" << std::endl;
+
+    // time_t curtime = time(NULL);
+    // unsigned long long time = (unsigned long long)curtime;
+	// std::cout<<"==================="<<std::to_string(time)<<std::endl;
+
+    
+
 
     double2vector();
 

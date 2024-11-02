@@ -48,7 +48,7 @@ class Estimator
     void vector2double();
     void double2vector();
     bool failureDetection();
-
+    void evaluateBA(ceres::Problem& problem, const ceres::Solver::Summary& summary);
 
     enum SolverFlag
     {
