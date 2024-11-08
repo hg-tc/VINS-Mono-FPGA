@@ -687,8 +687,9 @@ void Generate_Inst(ceres::CRSMatrix* jacobian_crs_matrix, string name){
     vector<int> code_pos;
     string uni_code;
     vector<int> pos_list;
-    vector<int> position_col;
-    vector<int> pre_position_col;
+    vector<int> position_col(2);
+    vector<int> pre_position_col(2);
+    int ETF_block_num = 0;
     int vision_col = 0;
     int pre_vision_col = 0;
     int row_num= 1;
@@ -742,46 +743,57 @@ void Generate_Inst(ceres::CRSMatrix* jacobian_crs_matrix, string name){
             pre_position_col[1] = position_col[1];
             position_col[0] = lines_position[0];
             position_col[1] = lines_position[1];
-
+            // if(count%2==0 && count < 21){
+            //     pre_position_col[0] = 100;
+            //     pre_position_col[1] = 200;
+            // }
             if(count%2 == 0){
                 for(int i=0;i<2;i++){
+                    cout << "pos_now: " << pre_position_col[i] << endl;
                     vector<int>::iterator it,it2;
                     it=find(pos_list.begin(),pos_list.end(),pre_position_col[i]);
-                    if(it!=pos_list.end()){
+                    if(it==pos_list.end()){
+                        cout<<"no matched position"<<endl;
                         for(int j=0;j<code_list.size();j++){
                             code_list[j]+='0'; 
                         }
                     }
                     else{
                         it2=find(code_pos.begin(),code_pos.end(),pre_position_col[i]);
-                        if(it2!=code_pos.end()){
+                        if(it2==code_pos.end()){
+                            cout<<"no excited position, create_new"<<endl;
                             int index = std::distance(pos_list.begin(),it);
                             string new_code(uni_code);
                             new_code.replace(index,1,"1");
                             new_code += '1';
+                            cout<<"new_code: "<< new_code <<endl;
                             for(int j=0;j<code_list.size();j++){
-                                if(j==index){code_list.push_back(new_code);}
-                                else{code_list[j]+='0';}   
+                                code_list[j]+='0'; 
                             }
+                            code_list.push_back(new_code);
                             code_pos.push_back(pre_position_col[i]);
+                            
                         }
                         else{
+                            cout<<"find excited position, modified code"<<endl;
                             int index = std::distance(code_pos.begin(),it2);
                             for(int j=0;j<code_list.size();j++){
                                 if(j==index){code_list[j] += '1';}
                                 else{code_list[j]+='0';}   
                             }
+                            cout <<"index: "<< index <<endl;
+                            // for(int j=0;j<code_list.size();j++){
+                            //     string code_now = code_list[j];
+                            //     cout<< code_now << endl;
+                            // }
                         }
-                        
-                        
+                        ETF_block_num -= 1;
                     }
                     pos_list.push_back(pre_position_col[i]);
                     uni_code += "0";
+                    ETF_block_num += 1;
                 }
-
-                
             }
-
             cout << pre_vision_col <<" "<< vision_col << endl;
 
             if(pre_vision_col != 0){
@@ -796,30 +808,54 @@ void Generate_Inst(ceres::CRSMatrix* jacobian_crs_matrix, string name){
                     I_file << Load_Instruction << endl;
                     cout << "Load_Instruction: " << Load_Instruction <<endl;
                     //
-                    for(int j=0; j<lines-1; j++){
-                        string last = j==(lines-1) ? "1" : "0";
-                        string code;
-                        for (int k=0; k<9; k++){
-                            if(k<3){
-                                code += "01";
-                            }
-                            else{
-                                code += "00";
+                    for(int j=0; j<code_list.size(); j++){
+                        string last = j==(code_list.size()-1) ? "1" : "0";
+                        string code = code_list[j];
+                        string ADD_Instruction;
+                        if(code.size()<=18){
+                            ADD_Instruction = string("0010")+"000000001"+last+code;
+                            for(int k=0;k<(18-code.size());k++){ADD_Instruction+='1';}
+                            I_file << ADD_Instruction << endl;
+                            cout << "ADD_Instruction: " << ADD_Instruction <<endl;
+                        }
+                        else{
+                            while(1){
+                                if(code.size()<=18){
+                                    ADD_Instruction = string("0010")+"000000001"+last+code;
+                                    for(int k=0;k<(18-code.size());k++){ADD_Instruction+='1';}
+                                    I_file << ADD_Instruction << endl;
+                                    cout << "ADD_Instruction: " << ADD_Instruction <<endl;
+                                    break;
+                                }else{
+                                    string code_used = code.substr(0,18);
+                                    ADD_Instruction = string("0010")+"000000001"+"0"+code_used;
+                                    code=code.substr(18,code.size());
+                                    I_file << ADD_Instruction << endl;
+                                    cout << "ADD_Instruction: " << ADD_Instruction <<endl;
+                                }
                             }
                         }
-                        string ADD_Instruction = string("0010")+"000000001"+last+code;
-                        I_file << ADD_Instruction << endl;
-                        cout << "ADD_Instruction: " << ADD_Instruction <<endl;
                     }
+                    
                     //
+                    string ETF_num = std::bitset<24>(ETF_block_num).to_string();
                     string E_pi_s = std::bitset<4>(E_pi).to_string();
-                    string multi_Instruction = "0011" + E_pi_s + "00000000000000000000" +len;
+                    string multi_Instruction = "0011" + E_pi_s  + ETF_num;
                     I_file << multi_Instruction << endl;
                     cout << "multi_Instruction: " << multi_Instruction <<endl;
                     string G_pi_s = std::bitset<4>(G_pi).to_string();
-                    string GTG_Instruction = "0100" + G_pi_s + "00000000000000000000" + len;
+                    string GTG_Instruction = "0100" + G_pi_s  + ETF_num;
                     I_file << GTG_Instruction << endl;
                     cout << "GTG_Instruction: " << GTG_Instruction <<endl;
+                    //
+                    code_list.clear();
+                    code_pos.clear();
+                    pos_list.clear();
+                    ETF_block_num = 0;
+                    uni_code.clear();
+                    L_pi =  (L_pi+1)%6;
+                    E_pi =  (E_pi+1)%6;
+                    G_pi =  (G_pi+1)%6;
                 }
             } 
             // I_file << endl;
@@ -1064,14 +1100,16 @@ void Estimator::optimization()
         options.max_solver_time_in_seconds = SOLVER_TIME * 4.0 / 5.0;
     else
         options.max_solver_time_in_seconds = SOLVER_TIME;
+    
+    
     TicToc t_solver;
     ceres::Solver::Summary summary;
+    evaluateBA(problem, summary);
     ceres::Solve(options, &problem, &summary);
     //cout << summary.BriefReport() << endl;
     ROS_DEBUG("Iterations : %d", static_cast<int>(summary.iterations.size()));
     ROS_DEBUG("solver costs: %f", t_solver.toc());
 
-    evaluateBA(problem, summary);
     std::cout << "evaluateBA end" << std::endl;
 
     // time_t curtime = time(NULL);
